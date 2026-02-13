@@ -1048,6 +1048,10 @@ footer {
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     transition: all 0.3s;
     border: 2px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 280px; /* 最小の高さを設定 */
 }
 
 .usage-card:hover {
