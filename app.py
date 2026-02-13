@@ -294,6 +294,200 @@ def permanent_delete(item_id):
 def statistics():
     conn = get_db()
     
+    # パラメータ取得（月選択・期間選択）
+    selected_period = request.args.get('period', 'current_month')  # current_month, 3months, 6months, 9months, 1year
+    selected_month = request.args.get('month', '')  # 2026-02 形式
+    
+    # 期間の計算
+    if selected_period == 'current_month':
+        start_date = "date('now', 'start of month')"
+        period_label = "今月"
+    elif selected_period == '3months':
+        start_date = "date('now', '-3 months')"
+        period_label = "過去3ヶ月"
+    elif selected_period == '6months':
+        start_date = "date('now', '-6 months')"
+        period_label = "過去6ヶ月"
+    elif selected_period == '9months':
+        start_date = "date('now', '-9 months')"
+        period_label = "過去9ヶ月"
+    elif selected_period == '1year':
+        start_date = "date('now', '-1 year')"
+        period_label = "過去1年"
+    elif selected_month:
+        # 特定の月が選択された場合
+        start_date = f"date('{selected_month}-01')"
+        period_label = selected_month.replace('-', '年') + '月'
+    else:
+        start_date = "date('now', 'start of month')"
+        period_label = "今月"
+    
+    # 利用可能な月のリスト取得（過去12ヶ月）
+    available_months = conn.execute('''
+        SELECT DISTINCT strftime('%Y-%m', created_at) as month
+        FROM STOCK_TRANSACTIONS
+        WHERE created_at >= date('now', '-12 months')
+        ORDER BY month DESC
+    ''').fetchall()
+    
+    # 1. 月別使用量（過去6ヶ月）
+    monthly_usage = conn.execute('''
+        SELECT 
+            strftime('%Y-%m', st.created_at) as month,
+            i.name as item_name,
+            SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as usage
+        FROM STOCK_TRANSACTIONS st
+        JOIN ITEMS i ON st.item_id = i.item_id
+        WHERE st.created_at >= date('now', '-6 months')
+        AND st.reason IN ('使用', '廃棄')
+        GROUP BY month, i.name
+        ORDER BY month DESC
+    ''').fetchall()
+    
+    # 2. カテゴリー別在庫割合
+    category_stock = conn.execute('''
+        SELECT 
+            c.name as category_name,
+            COUNT(i.item_id) as item_count,
+            SUM(i.current_quantity) as total_quantity
+        FROM CATEGORIES c
+        LEFT JOIN ITEMS i ON c.category_id = i.category_id AND i.is_active = 1
+        GROUP BY c.category_id, c.name
+        ORDER BY item_count DESC
+    ''').fetchall()
+    
+    # 3. よく使う品目ランキング（選択期間）
+    if selected_month:
+        # 特定の月
+        top_items_query = f'''
+            SELECT 
+                i.name as item_name,
+                i.unit,
+                SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+                COUNT(*) as transaction_count
+            FROM STOCK_TRANSACTIONS st
+            JOIN ITEMS i ON st.item_id = i.item_id
+            WHERE strftime('%Y-%m', st.created_at) = '{selected_month}'
+            AND st.reason IN ('使用', '廃棄')
+            GROUP BY i.item_id, i.name, i.unit
+            ORDER BY total_usage DESC
+            LIMIT 10
+        '''
+    else:
+        top_items_query = f'''
+            SELECT 
+                i.name as item_name,
+                i.unit,
+                SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+                COUNT(*) as transaction_count
+            FROM STOCK_TRANSACTIONS st
+            JOIN ITEMS i ON st.item_id = i.item_id
+            WHERE st.created_at >= {start_date}
+            AND st.reason IN ('使用', '廃棄')
+            GROUP BY i.item_id, i.name, i.unit
+            ORDER BY total_usage DESC
+            LIMIT 10
+        '''
+    
+    top_items = conn.execute(top_items_query).fetchall()
+    
+    # 3-2. 単位ごとの使用量ランキング
+    units_ranking = {}
+    all_units = conn.execute('SELECT DISTINCT unit FROM ITEMS WHERE is_active = 1 AND unit IS NOT NULL').fetchall()
+    
+    for unit_row in all_units:
+        unit = unit_row['unit']
+        
+        if selected_month:
+            items_query = f'''
+                SELECT 
+                    i.name as item_name,
+                    i.unit,
+                    SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+                    COUNT(*) as transaction_count
+                FROM STOCK_TRANSACTIONS st
+                JOIN ITEMS i ON st.item_id = i.item_id
+                WHERE strftime('%Y-%m', st.created_at) = '{selected_month}'
+                AND st.reason IN ('使用', '廃棄')
+                AND i.unit = ?
+                GROUP BY i.item_id, i.name, i.unit
+                ORDER BY total_usage DESC
+                LIMIT 5
+            '''
+        else:
+            items_query = f'''
+                SELECT 
+                    i.name as item_name,
+                    i.unit,
+                    SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+                    COUNT(*) as transaction_count
+                FROM STOCK_TRANSACTIONS st
+                JOIN ITEMS i ON st.item_id = i.item_id
+                WHERE st.created_at >= {start_date}
+                AND st.reason IN ('使用', '廃棄')
+                AND i.unit = ?
+                GROUP BY i.item_id, i.name, i.unit
+                ORDER BY total_usage DESC
+                LIMIT 5
+            '''
+        
+        items = conn.execute(items_query, (unit,)).fetchall()
+        
+        if items:
+            units_ranking[unit] = items
+    
+    # 4. 在庫アラート（閾値120%以下）
+    low_stock_items = conn.execute('''
+        SELECT 
+            i.name as item_name,
+            i.current_quantity,
+            i.min_threshold,
+            i.unit,
+            ROUND((i.current_quantity * 100.0 / i.min_threshold), 1) as percentage
+        FROM ITEMS i
+        WHERE i.is_active = 1 
+        AND i.current_quantity <= (i.min_threshold * 1.2)
+        ORDER BY percentage ASC
+    ''').fetchall()
+    
+    # 5. 期間の統計サマリー
+    if selected_month:
+        summary_query = f'''
+            SELECT 
+                COUNT(DISTINCT CASE WHEN quantity_delta > 0 THEN item_id END) as items_received,
+                COUNT(DISTINCT CASE WHEN quantity_delta < 0 THEN item_id END) as items_used,
+                SUM(CASE WHEN quantity_delta > 0 THEN quantity_delta ELSE 0 END) as total_received,
+                SUM(CASE WHEN quantity_delta < 0 THEN ABS(quantity_delta) ELSE 0 END) as total_used
+            FROM STOCK_TRANSACTIONS
+            WHERE strftime('%Y-%m', created_at) = '{selected_month}'
+        '''
+    else:
+        summary_query = f'''
+            SELECT 
+                COUNT(DISTINCT CASE WHEN quantity_delta > 0 THEN item_id END) as items_received,
+                COUNT(DISTINCT CASE WHEN quantity_delta < 0 THEN item_id END) as items_used,
+                SUM(CASE WHEN quantity_delta > 0 THEN quantity_delta ELSE 0 END) as total_received,
+                SUM(CASE WHEN quantity_delta < 0 THEN ABS(quantity_delta) ELSE 0 END) as total_used
+            FROM STOCK_TRANSACTIONS
+            WHERE created_at >= {start_date}
+        '''
+    
+    monthly_summary = conn.execute(summary_query).fetchone()
+    
+    conn.close()
+    
+    return render_template('statistics.html', 
+                         monthly_usage=monthly_usage,
+                         category_stock=category_stock,
+                         top_items=top_items,
+                         units_ranking=units_ranking,
+                         low_stock_items=low_stock_items,
+                         monthly_summary=monthly_summary,
+                         available_months=available_months,
+                         selected_period=selected_period,
+                         selected_month=selected_month,
+                         period_label=period_label)
+    
     # 1. 月別使用量（過去6ヶ月）
     monthly_usage = conn.execute('''
         SELECT 

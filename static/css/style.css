@@ -1164,3 +1164,130 @@ footer {
         font-size: 1.2rem;
     }
 }
+/* ========================================
+   期間選択UI
+======================================== */
+.period-selector {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.period-selector h3 {
+    color: #667eea;
+    margin-bottom: 1.5rem;
+    font-size: 1.3rem;
+}
+
+/* 期間ボタン */
+.period-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.period-btn {
+    padding: 0.75rem 1.5rem;
+    border: 2px solid #667eea;
+    border-radius: 8px;
+    background: white;
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.period-btn:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.period-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #764ba2;
+}
+
+/* 月選択ドロップダウン */
+.month-selector {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.month-selector label {
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+}
+
+.month-selector select {
+    flex: 1;
+    max-width: 300px;
+    padding: 0.75rem;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 1rem;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.month-selector select:hover {
+    border-color: #667eea;
+}
+
+.month-selector select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 現在の表示期間 */
+.current-period {
+    padding: 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.period-label {
+    color: white;
+    font-size: 1.1rem;
+}
+
+.period-label strong {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .period-buttons {
+        flex-direction: column;
+    }
+    
+    .period-btn {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .month-selector {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .month-selector select {
+        max-width: 100%;
+    }
+}
