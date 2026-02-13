@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📜 在庫履歴（最新100件）</h2>
+
+<div class="history-list">
+    {% for tx in transactions %}
+    <div class="history-item">
+        <div class="history-header">
+            <strong>{{ tx.item_name }}</strong>
+           <span class="quantity-change {% if tx.quantity_delta > 0 %}increase{% else %}decrease{% endif %}">
+    <span class="arrow">{{ '↑' if tx.quantity_delta > 0 else '↓' }}</span>
+    <span class="amount">{{ tx.quantity_delta|abs }} {{ tx.unit }}</span>
+</span>
+        </div>
+        <div class="history-details">
+            <p>理由: {{ tx.reason }}</p>
+            {% if tx.note %}
+            <p>メモ: {{ tx.note }}</p>
+            {% endif %}
+            <p class="meta">操作者: {{ tx.user_name }} / 日時: {{ tx.created_at }}</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not transactions %}
+<p class="empty-message">まだ履歴がありません。</p>
+{% endif %}
+
+<a href="{{ url_for('index') }}" class="btn btn-secondary">戻る</a>
+
+{% endblock %}

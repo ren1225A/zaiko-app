@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="login-container">
+    <h2>ログイン</h2>
+    <form method="POST" class="login-form">
+        <div class="form-group">
+            <label for="name">名前:</label>
+            <input type="text" id="name" name="name" required autofocus>
+        </div>
+        
+        <div class="form-group">
+            <label for="role">役割:</label>
+            <select id="role" name="role" required>
+                <option value="owner">店主</option>
+                <option value="staff">バイト</option>
+            </select>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">ログイン</button>
+    </form>
+    <p class="note">※初回は自動でユーザー登録されます</p>
+</div>
+{% endblock %}

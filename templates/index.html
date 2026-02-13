@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📋 在庫一覧</h2>
+
+<!-- 通知エリア -->
+{% if notifications %}
+<div class="notifications">
+    <h3>⚠️ 在庫アラート</h3>
+    {% for notification in notifications %}
+    <div class="notification-item">
+        <p>
+            <strong>{{ notification.item_name }}</strong> の在庫が少なくなっています
+            （現在: {{ notification.quantity_at_time }} / 最低在庫数: {{ notification.threshold_at_time }}）
+        </p>
+        <small>{{ notification.triggered_at }}</small>
+        <a href="{{ url_for('resolve_notification', notification_id=notification.notification_id) }}" 
+           class="btn btn-small">解決</a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 在庫リスト（カテゴリー別・アコーディオン） -->
+{% if categories %}
+    {% for category in categories %}
+        {% if items_by_category[category.category_id]|length > 0 %}
+        <div class="category-accordion">
+            <!-- カテゴリーヘッダー（クリックで開閉） -->
+            <div class="category-header" onclick="toggleCategory({{ category.category_id }})">
+                <div class="category-header-left">
+                    {% if category.icon_path %}
+                    <img src="{{ url_for('static', filename='images/' + category.icon_path) }}" alt="{{ category.name }}" class="category-header-icon">
+                    {% else %}
+                    <span class="category-header-icon-placeholder">📁</span>
+                    {% endif %}
+                    <h3 class="category-header-title">{{ category.name }}</h3>
+                    <span class="item-count">({{ items_by_category[category.category_id]|length }}品目)</span>
+                </div>
+                <span class="accordion-arrow" id="arrow-{{ category.category_id }}">▼</span>
+            </div>
+            
+            <!-- カテゴリーの中身（最初は非表示） -->
+            <div class="category-content" id="content-{{ category.category_id }}" style="display: none;">
+                <div class="items-grid">
+                    {% for item in items_by_category[category.category_id] %}
+                    <div class="item-card {% if item.current_quantity < item.min_threshold %}low-stock{% endif %}">
+                        <h3>{{ item.name }}</h3>
+                        <div class="item-info">
+                            <p class="quantity">
+                                現在: <strong>{{ item.current_quantity }} {{ item.unit }}</strong>
+                            </p>
+                            <p class="threshold">閾値: {{ item.min_threshold }} {{ item.unit }}</p>
+                            {% if item.supplier_name %}
+                            <p class="supplier">📍 {{ item.supplier_name }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 在庫増減フォーム -->
+                        <form method="POST" action="{{ url_for('update_stock', item_id=item.item_id) }}" class="stock-form">
+                            <!-- クイックボタン -->
+                            <div class="quick-buttons">
+                                <button type="button" class="quick-btn decrease" data-value="-50">-50</button>
+                                <button type="button" class="quick-btn decrease" data-value="-10">-10</button>
+                                <button type="button" class="quick-btn decrease" data-value="-5">-5</button>
+                                <button type="button" class="quick-btn decrease" data-value="-1">-1</button>
+                                <button type="button" class="quick-btn decrease" data-value="-0.1">-0.1</button>
+                                <button type="button" class="quick-btn increase" data-value="0.1">+0.1</button>
+                                <button type="button" class="quick-btn increase" data-value="1">+1</button>
+                                <button type="button" class="quick-btn increase" data-value="5">+5</button>
+                                <button type="button" class="quick-btn increase" data-value="10">+10</button>
+                                <button type="button" class="quick-btn increase" data-value="50">+50</button>
+                            </div>
+                            
+                            <!-- リセットボタン -->
+                            <div class="reset-row">
+                                <button type="button" class="btn-reset">リセット</button>
+                            </div>
+                            
+                            <div class="form-row">
+                                <input type="number" name="quantity_delta" step="0.1" placeholder="±数量" required readonly>
+                                <span>{{ item.unit }}</span>
+                            </div>
+                            
+                            <select name="reason" required>
+                                <option value="">理由を選択</option>
+                                <option value="入荷">入荷</option>
+                                <option value="使用">使用</option>
+                                <option value="廃棄">廃棄</option>
+                                <option value="棚卸し">棚卸し</option>
+                            </select>
+                            
+                            <input type="text" name="note" placeholder="メモ（任意）">
+                            
+                            <button type="submit" class="btn btn-primary">更新</button>
+                        </form>
+                        
+                        <!-- カテゴリー変更・削除ボタン（店主のみ） -->
+                        {% if session.get('role') == 'owner' %}
+                        <div class="owner-actions">
+                            <!-- カテゴリー変更 -->
+                            <form method="POST" action="{{ url_for('change_category', item_id=item.item_id) }}" class="category-change-form">
+                                <select name="category_id" onchange="this.form.submit()">
+                                    <option value="">カテゴリー移動</option>
+                                    {% for cat in categories %}
+                                        {% if cat.category_id != category.category_id %}
+                                        <option value="{{ cat.category_id }}">→ {{ cat.name }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </form>
+                            
+                            <!-- 削除 -->
+                            <form method="POST" action="{{ url_for('delete_item', item_id=item.item_id) }}" class="delete-form" onsubmit="return confirm('本当に「{{ item.name }}」を削除しますか？');">
+                                <button type="submit" class="btn btn-danger">削除</button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    <p class="empty-message">カテゴリーが登録されていません。</p>
+{% endif %}
+
+{% if not categories or (categories|length == 0) %}
+<p class="empty-message">まだ品目が登録されていません。</p>
+{% if session.get('role') == 'owner' %}
+<a href="{{ url_for('add_item') }}" class="btn btn-primary">最初の品目を追加</a>
+{% endif %}
+{% endif %}
+
+{% endblock %}

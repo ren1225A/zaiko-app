@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>➕ 品目追加（店主のみ）</h2>
+
+<form method="POST" class="add-item-form">
+    <div class="form-group">
+        <label for="name">品目名:</label>
+        <input type="text" id="name" name="name" placeholder="例: 珈琲豆（ブラジル）" required autofocus>
+    </div>
+    
+    <div class="form-group">
+        <label for="unit">単位:</label>
+        <input type="text" id="unit" name="unit" placeholder="例: g, L, 個, 箱" required>
+    </div>
+    
+    <div class="form-group">
+        <label for="min_threshold">最低在庫量:</label>
+        <input type="number" id="min_threshold" name="min_threshold" step="0.1" placeholder="例: 100" required>
+        <small>この値を下回ると通知が表示されます</small>
+    </div>
+    
+   
+    <div class="form-group">
+        <label for="supplier_id">仕入先:</label>
+        <select id="supplier_id" name="supplier_id">
+            <option value="">選択なし</option>
+            {% for supplier in suppliers %}
+            <option value="{{ supplier.supplier_id }}">{{ supplier.name }}</option>
+            {% endfor %}
+        </select>
+        <small>※仕入先がリストにない場合は、後でデータベースから追加できます</small>
+    </div>
+    
+    <div class="form-group">
+        <label for="category_id">カテゴリー:</label>
+        <select id="category_id" name="category_id" required>
+            <option value="">選択してください</option>
+            {% for category in categories %}
+            <option value="{{ category.category_id }}">{{ category.name }}</option>
+            {% endfor %}
+        </select>
+        <small>※カテゴリーは「カテゴリー管理」から追加できます</small>
+    </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">追加</button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">キャンセル</a>
+    </div>
+</form>
+{% endblock %}

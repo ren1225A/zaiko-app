@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📁 カテゴリー管理（店主のみ）</h2>
+
+<!-- カテゴリー追加フォーム -->
+<div class="category-add-form">
+    <h3>新しいカテゴリーを追加</h3>
+    <form method="POST" action="{{ url_for('add_category') }}">
+        <div class="form-group">
+            <input type="text" name="name" placeholder="カテゴリー名（例: コーヒー）" required autofocus>
+        </div>
+        <div class="form-group">
+            <input type="text" name="icon_filename" placeholder="画像ファイル名（例: コーヒー豆.jpg）">
+            <small>※ static/images/ フォルダに画像を配置してください</small>
+        </div>
+        <button type="submit" class="btn btn-primary">追加</button>
+    </form>
+</div>
+
+<!-- カテゴリー一覧 -->
+<div class="category-list">
+    <h3>現在のカテゴリー</h3>
+    {% for category in categories %}
+    <div class="category-item">
+        <div class="category-display">
+            {% if category.icon_path %}
+            <img src="{{ url_for('static', filename='images/' + category.icon_path) }}" alt="{{ category.name }}" class="category-icon">
+            {% else %}
+            <span class="category-icon-placeholder">📁</span>
+            {% endif %}
+            <span class="category-name">{{ category.name }}</span>
+        </div>
+        <form method="POST" action="{{ url_for('delete_category', category_id=category.category_id) }}" 
+              style="display: inline;"
+              onsubmit="return confirm('カテゴリー「{{ category.name }}」を削除しますか？\n※品目が登録されている場合は削除できません。');">
+            <button type="submit" class="btn btn-small btn-danger">削除</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+</div>
+
+<a href="{{ url_for('index') }}" class="btn btn-secondary">在庫一覧に戻る</a>
+
+{% endblock %}

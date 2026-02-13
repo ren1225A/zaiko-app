@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>🗑️ ゴミ箱（削除済み品目）</h2>
+
+{% if items %}
+<p class="trash-info">削除した品目は30日間保管されます。復元または完全削除を選択できます。</p>
+
+<div class="trash-list">
+    {% for item in items %}
+    <div class="trash-item">
+        <div class="trash-header">
+            <h3>{{ item.name }}</h3>
+            <span class="deleted-date">削除日: {{ item.updated_at }}</span>
+        </div>
+        
+        <div class="trash-details">
+            <p>最終在庫: {{ item.current_quantity }} {{ item.unit }}</p>
+            <p>最低在庫数: {{ item.min_threshold }} {{ item.unit }}</p>
+            {% if item.supplier_name %}
+            <p>仕入先: {{ item.supplier_name }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="trash-actions">
+    <form method="POST" action="{{ url_for('restore_item', item_id=item.item_id) }}" 
+          style="display: inline;" 
+          onsubmit="return confirm('「{{ item.name }}」を復元しますか？\n在庫一覧に戻ります。');">
+        <button type="submit" class="btn btn-restore">復元</button>
+    </form>
+    
+    <form method="POST" action="{{ url_for('permanent_delete', item_id=item.item_id) }}" 
+          style="display: inline;" 
+          onsubmit="return confirm('「{{ item.name }}」を完全に削除しますか？\n\nこの操作は取り消せません。\nデータベースから完全に消去されます。');">
+        <button type="submit" class="btn btn-permanent-delete">完全削除</button>
+    </form>
+</div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-message">ゴミ箱は空です。</p>
+{% endif %}
+
+<a href="{{ url_for('index') }}" class="btn btn-secondary">在庫一覧に戻る</a>
+
+{% endblock %}
