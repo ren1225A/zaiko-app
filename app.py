@@ -288,6 +288,113 @@ def permanent_delete(item_id):
     
     conn.close()
     return redirect(url_for('trash'))
+# 統計・レポート
+@app.route('/statistics')
+@login_required
+def statistics():
+    conn = get_db()
+    
+    # 1. 月別使用量（過去6ヶ月）
+    monthly_usage = conn.execute('''
+        SELECT 
+            strftime('%Y-%m', st.created_at) as month,
+            i.name as item_name,
+            SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as usage
+        FROM STOCK_TRANSACTIONS st
+        JOIN ITEMS i ON st.item_id = i.item_id
+        WHERE st.created_at >= date('now', '-6 months')
+        AND st.reason IN ('使用', '廃棄')
+        GROUP BY month, i.name
+        ORDER BY month DESC
+    ''').fetchall()
+    
+    # 2. カテゴリー別在庫割合
+    category_stock = conn.execute('''
+        SELECT 
+            c.name as category_name,
+            COUNT(i.item_id) as item_count,
+            SUM(i.current_quantity) as total_quantity
+        FROM CATEGORIES c
+        LEFT JOIN ITEMS i ON c.category_id = i.category_id AND i.is_active = 1
+        GROUP BY c.category_id, c.name
+        ORDER BY item_count DESC
+    ''').fetchall()
+    
+    # 3. よく使う品目ランキング（今月）
+    top_items = conn.execute('''
+        SELECT 
+            i.name as item_name,
+            i.unit,
+            SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+            COUNT(*) as transaction_count
+        FROM STOCK_TRANSACTIONS st
+        JOIN ITEMS i ON st.item_id = i.item_id
+        WHERE st.created_at >= date('now', 'start of month')
+        AND st.reason IN ('使用', '廃棄')
+        GROUP BY i.item_id, i.name, i.unit
+        ORDER BY total_usage DESC
+        LIMIT 10
+    ''').fetchall()
+    
+    # 3-2. 単位ごとの使用量ランキング
+    units_ranking = {}
+    all_units = conn.execute('SELECT DISTINCT unit FROM ITEMS WHERE is_active = 1 AND unit IS NOT NULL').fetchall()
+    
+    for unit_row in all_units:
+        unit = unit_row['unit']
+        items = conn.execute('''
+            SELECT 
+                i.name as item_name,
+                i.unit,
+                SUM(CASE WHEN st.quantity_delta < 0 THEN ABS(st.quantity_delta) ELSE 0 END) as total_usage,
+                COUNT(*) as transaction_count
+            FROM STOCK_TRANSACTIONS st
+            JOIN ITEMS i ON st.item_id = i.item_id
+            WHERE st.created_at >= date('now', 'start of month')
+            AND st.reason IN ('使用', '廃棄')
+            AND i.unit = ?
+            GROUP BY i.item_id, i.name, i.unit
+            ORDER BY total_usage DESC
+            LIMIT 5
+        ''', (unit,)).fetchall()
+        
+        if items:
+            units_ranking[unit] = items
+    
+    # 4. 在庫アラート（閾値80%以下）
+    low_stock_items = conn.execute('''
+        SELECT 
+            i.name as item_name,
+            i.current_quantity,
+            i.min_threshold,
+            i.unit,
+            ROUND((i.current_quantity * 100.0 / i.min_threshold), 1) as percentage
+        FROM ITEMS i
+        WHERE i.is_active = 1 
+        AND i.current_quantity <= (i.min_threshold * 1.2)
+        ORDER BY percentage ASC
+    ''').fetchall()
+    
+    # 5. 今月の統計サマリー
+    monthly_summary = conn.execute('''
+        SELECT 
+            COUNT(DISTINCT CASE WHEN quantity_delta > 0 THEN item_id END) as items_received,
+            COUNT(DISTINCT CASE WHEN quantity_delta < 0 THEN item_id END) as items_used,
+            SUM(CASE WHEN quantity_delta > 0 THEN quantity_delta ELSE 0 END) as total_received,
+            SUM(CASE WHEN quantity_delta < 0 THEN ABS(quantity_delta) ELSE 0 END) as total_used
+        FROM STOCK_TRANSACTIONS
+        WHERE created_at >= date('now', 'start of month')
+    ''').fetchone()
+    
+    conn.close()
+    
+    return render_template('statistics.html', 
+                         monthly_usage=monthly_usage,
+                         category_stock=category_stock,
+                         top_items=top_items,
+                         units_ranking=units_ranking,
+                         low_stock_items=low_stock_items,
+                         monthly_summary=monthly_summary)
 # カテゴリー管理（店主のみ）
 @app.route('/categories')
 @owner_required

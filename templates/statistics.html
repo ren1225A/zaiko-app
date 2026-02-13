@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📊 統計・レポート</h2>
+
+<!-- サマリーカード -->
+<div class="stats-summary">
+    <div class="summary-card">
+        <h3>今月の入荷品目</h3>
+        <p class="summary-number">{{ monthly_summary.items_received or 0 }}</p>
+        <p class="summary-label">品目</p>
+    </div>
+    
+    <div class="summary-card">
+        <h3>今月の使用品目</h3>
+        <p class="summary-number">{{ monthly_summary.items_used or 0 }}</p>
+        <p class="summary-label">品目</p>
+    </div>
+    
+    <div class="summary-card">
+        <h3>在庫アラート</h3>
+        <p class="summary-number alert">{{ low_stock_items|length }}</p>
+        <p class="summary-label">品目</p>
+    </div>
+</div>
+
+<!-- グラフエリア -->
+<div class="charts-container">
+    
+    <!-- カテゴリー別在庫割合 -->
+    <div class="chart-box">
+        <h3>📁 カテゴリー別品目数</h3>
+        <canvas id="categoryChart"></canvas>
+    </div>
+    
+    <!-- よく使う品目ランキング -->
+    <div class="chart-box wide">
+        <h3>🏆 今月よく使う品目トップ10</h3>
+        <canvas id="topItemsChart"></canvas>
+    </div>
+    <!-- 単位ごとのランキング -->
+    {% for unit, items in units_ranking.items() %}
+    <div class="chart-box">
+        <h3>📊 {{ unit }}の使用ランキング</h3>
+        <canvas id="unitChart_{{ unit|replace('.', '_')|replace(' ', '_') }}"></canvas>
+    </div>
+    {% endfor %}
+
+
+<!-- 在庫アラート一覧 -->
+{% if low_stock_items %}
+<div class="alert-section">
+    <h3>⚠️ 在庫アラート（閾値120%以下）</h3>
+    <div class="alert-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>品目名</th>
+                    <th>現在在庫</th>
+                    <th>閾値</th>
+                    <th>割合</th>
+                    <th>状態</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in low_stock_items %}
+                <tr class="{% if item.percentage < 50 %}critical{% elif item.percentage < 80 %}warning{% endif %}">
+                    <td><strong>{{ item.item_name }}</strong></td>
+                    <td>{{ item.current_quantity }} {{ item.unit }}</td>
+                    <td>{{ item.min_threshold }} {{ item.unit }}</td>
+                    <td>{{ item.percentage }}%</td>
+                    <td>
+                        {% if item.percentage < 50 %}
+                        <span class="badge badge-critical">🔴 緊急</span>
+                        {% elif item.percentage < 80 %}
+                        <span class="badge badge-warning">🟡 注意</span>
+                        {% else %}
+                        <span class="badge badge-caution">🟠 やや少</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- よく使う品目の詳細テーブル -->
+{% if top_items %}
+<div class="top-items-section">
+    <h3>📋 今月の使用量詳細</h3>
+    <div class="usage-details-grid">
+        {% for item in top_items %}
+        <div class="usage-card {% if loop.index <= 3 %}top-rank{% endif %}">
+            <div class="usage-card-header">
+                <span class="usage-rank">
+                    {% if loop.index == 1 %}🥇
+                    {% elif loop.index == 2 %}🥈
+                    {% elif loop.index == 3 %}🥉
+                    {% else %}{{ loop.index }}位
+                    {% endif %}
+                </span>
+                <h4>{{ item.item_name }}</h4>
+            </div>
+            <div class="usage-card-body">
+                <div class="usage-stat">
+                    <span class="usage-label">使用量</span>
+                    <span class="usage-value">{{ "%.1f"|format(item.total_usage) }} <span class="unit">{{ item.unit }}</span></span>
+                </div>
+                <div class="usage-stat">
+                    <span class="usage-label">使用回数</span>
+                    <span class="usage-value">{{ item.transaction_count }} <span class="unit">回</span></span>
+                </div>
+                <div class="usage-stat">
+                    <span class="usage-label">1回あたり</span>
+                    <span class="usage-value">{{ "%.1f"|format(item.total_usage / item.transaction_count) }} <span class="unit">{{ item.unit }}</span></span>
+                </div>
+            </div>
+            <div class="usage-progress">
+                <div class="usage-bar" style="width: {{ (item.total_usage / top_items[0].total_usage * 100) if top_items else 0 }}%"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+<a href="{{ url_for('index') }}" class="btn btn-secondary">在庫一覧に戻る</a>
+
+<!-- Chart.js を読み込み -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- グラフ描画スクリプト -->
+<script>
+// カテゴリー別円グラフ
+const categoryData = {
+    labels: [
+        {% for cat in category_stock %}
+        '{{ cat.category_name }}'{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ],
+    datasets: [{
+        data: [
+            {% for cat in category_stock %}
+            {{ cat.item_count }}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ],
+        backgroundColor: [
+            '#667eea',
+            '#764ba2',
+            '#f093fb',
+            '#4facfe',
+            '#43e97b',
+            '#fa709a',
+            '#fee140'
+        ]
+    }]
+};
+
+new Chart(document.getElementById('categoryChart'), {
+    type: 'doughnut',
+    data: categoryData,
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    font: { size: 14 },
+                    padding: 15
+                }
+            }
+        }
+    }
+});
+
+// よく使う品目の棒グラフ
+const topItemsData = {
+    labels: [
+        {% for item in top_items %}
+        '{{ item.item_name }}'{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ],
+    datasets: [{
+        label: '使用量',
+        data: [
+            {% for item in top_items %}
+            {{ item.total_usage }}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ],
+        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+        borderColor: 'rgba(102, 126, 234, 1)',
+        borderWidth: 2
+    }]
+};
+
+new Chart(document.getElementById('topItemsChart'), {
+    type: 'bar',
+    data: topItemsData,
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { font: { size: 12 } }
+            },
+            x: {
+                ticks: { font: { size: 12 } }
+            }
+        }
+    }
+});
+// 単位ごとのグラフ
+{% for unit, items in units_ranking.items() %}
+new Chart(document.getElementById('unitChart_{{ unit|replace(".", "_")|replace(" ", "_") }}'), {
+    type: 'bar',
+    data: {
+        labels: [
+            {% for item in items %}
+            '{{ item.item_name }}'{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ],
+        datasets: [{
+            label: '使用量 ({{ unit }})',
+            data: [
+                {% for item in items %}
+                {{ item.total_usage }}{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ],
+            backgroundColor: 'rgba(118, 75, 162, 0.8)',
+            borderColor: 'rgba(118, 75, 162, 1)',
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: true }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { font: { size: 12 } }
+            },
+            x: {
+                ticks: { font: { size: 11 } }
+            }
+        }
+    }
+});
+{% endfor %}
+
+</script>
+
+{% endblock %}
