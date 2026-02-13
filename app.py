@@ -2,11 +2,103 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 import sqlite3
 from datetime import datetime
 from functools import wraps
+import os
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'  # 本番環境では変更してください
+app.secret_key = 'your-secret-key-change-this'
 
 DATABASE = 'zaiko2.db'
+
+# データベース初期化関数
+def init_db():
+    """データベースが存在しない場合、テーブルを作成"""
+    if not os.path.exists(DATABASE):
+        print("データベースが見つかりません。新規作成します...")
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        
+        cursor.executescript('''
+        CREATE TABLE USERS (
+            user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            role TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        
+        CREATE TABLE SUPPLIERS (
+            supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT,
+            address TEXT,
+            note TEXT
+        );
+        
+        CREATE TABLE CATEGORIES (
+            category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            display_order INTEGER DEFAULT 0,
+            icon_path TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        
+        CREATE TABLE ITEMS (
+            item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            unit TEXT,
+            current_quantity REAL DEFAULT 0,
+            min_threshold REAL DEFAULT 0,
+            supplier_id INTEGER,
+            category_id INTEGER,
+            created_by INTEGER,
+            is_active INTEGER DEFAULT 1,
+            display_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (supplier_id) REFERENCES SUPPLIERS(supplier_id),
+            FOREIGN KEY (category_id) REFERENCES CATEGORIES(category_id),
+            FOREIGN KEY (created_by) REFERENCES USERS(user_id)
+        );
+        
+        CREATE TABLE STOCK_TRANSACTIONS (
+            tx_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            quantity_delta REAL NOT NULL,
+            reason TEXT,
+            note TEXT,
+            user_id INTEGER,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (item_id) REFERENCES ITEMS(item_id),
+            FOREIGN KEY (user_id) REFERENCES USERS(user_id)
+        );
+        
+        CREATE TABLE NOTIFICATIONS (
+            notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            type TEXT,
+            triggered_at TEXT DEFAULT (datetime('now', 'localtime')),
+            threshold_at_time REAL,
+            quantity_at_time REAL,
+            is_resolved INTEGER DEFAULT 0,
+            FOREIGN KEY (item_id) REFERENCES ITEMS(item_id)
+        );
+        
+        INSERT INTO SUPPLIERS (name) VALUES ('マルナカ'), ('豆丸珈琲');
+        INSERT INTO CATEGORIES (name, display_order, icon_path) VALUES 
+            ('コーヒー', 1, 'コーヒー豆.jpg'),
+            ('食品', 2, '食品.jpg'),
+            ('飲み物', 3, '飲み物.jpg'),
+            ('日用品', 4, '日用品.jpg'),
+            ('その他', 5, 'その他.jpg');
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("データベースの初期化が完了しました！")
+    else:
+        print("既存のデータベースを使用します。")
+
+# アプリ起動時にデータベースを初期化
+init_db()
 
 # データベース接続
 def get_db():
